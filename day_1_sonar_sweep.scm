@@ -15,7 +15,7 @@
 
 
 (define (load-depths fname)
-  (define (read-row line)
+  (define (line->depth line)
     (with-input-from-string line
       (lambda ()
         (let ((word (read-string (char-set #\newline))))
@@ -28,7 +28,7 @@
 ;;        (warn line)
         (if (eof-object? line)
             '()
-            (cons (read-row line)
+            (cons (line->depth line)
                   (loop (read-line))))))))
 
 (count-increases (load-depths "day_1_input.txt"))
