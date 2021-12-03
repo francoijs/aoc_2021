@@ -9,3 +9,9 @@
               (begin
                 (read-char)
                 (cons line (loop)))))))))
+
+(define (curry1 fun arg1)
+  (lambda (arg2) (fun arg1 arg2)))
+(define curry curry1)
+(define (curry2 fun arg2)
+  (lambda (arg1) (fun arg1 arg2)))
