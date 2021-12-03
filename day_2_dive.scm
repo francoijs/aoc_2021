@@ -1,5 +1,7 @@
 ;; https://adventofcode.com/2021/day/2
 
+(load "utils.scm")
+
 ;; part 1
 
 (define (apply-command-1 command pos)
@@ -25,9 +27,8 @@
                                                (down . 8)
                                                (forward . 2)) '(0 . 0))))
 
-
 (define (load-commands fname)
-  (define (line->command line)
+  (define (string->command line)
     (with-input-from-string line
       (lambda ()
         (let ((direction (string->symbol (read-string (char-set #\space)))))
@@ -36,18 +37,11 @@
             (let ((units (read-string (char-set #\newline))))
               (read-char)
               (cons direction (string->number units))))))))
-  (with-input-from-file fname
-    (lambda ()
-      (let loop((line (read-line)))
-;        (warn line)
-        (if (eof-object? line)
-            '()
-            (cons (line->command line)
-                  (loop (read-line))))))))
+  (map string->command (load-file fname)))
 
-(let ((pos (apply-commands (load-commands "day_2_input.txt") '(0 . 0))))
-  (* (car pos) (cdr pos)))
-;; 1804520
+(assert (= 1804520
+           (let ((pos (apply-commands-1 (load-commands "day_2_input.txt") '(0 . 0))))
+             (* (car pos) (cdr pos)))))
 
 
 ;; part 2
@@ -79,7 +73,7 @@
 (assert (equal?  3 (sub-state:depth (apply-command '(forward . 3) (make-sub-state 0 0 1)))))
 (assert (equal?  1 (sub-state:aim  (apply-command '(forward . 3) (make-sub-state 0 0 1)))))
 
-(let ((new-state (fold apply-command (make-sub-state 0 0 0) (load-commands "day_2_input.txt"))))
-  (* (sub-state:hpos new-state)
-     (sub-state:depth new-state)))
-;; 1971095320
+(assert (= 1971095320
+           (let ((new-state (fold apply-command (make-sub-state 0 0 0) (load-commands "day_2_input.txt"))))
+             (* (sub-state:hpos new-state)
+                (sub-state:depth new-state)))))
