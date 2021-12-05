@@ -82,3 +82,48 @@
    ((equal? (car lst) (cadr lst)) (uniq (cdr lst)))
    (else (cons (car lst) (uniq (cdr lst))))))
 (assert (equal? '(1 2 3) (uniq '(1 2 2 3 3 3))))
+
+; generators
+; https://gist.github.com/zeeshanlakhani/1254439
+(define-syntax define-generator
+  (syntax-rules ()
+    ((_ (name arg1 ...) body1 ...)
+     (define (name arg1 ...)
+       (letrec ((main-logic
+                 (lambda (suspend)
+                   ;; we're just turning it into a function that
+                   ;; can be called within the expanded code.
+                   (let ((yield
+                          (lambda v
+                            (begin
+                              (call-with-current-continuation
+                               (lambda (new-bail)
+                                 (set! main-logic (lambda (cont)
+                                                    (set! suspend cont)
+                                                    (apply new-bail v)))
+                                 (apply suspend v)))))))
+                     (let name ((arg1 arg1) ...)
+                       body1 ...)))))
+         (lambda ()
+           (call-with-current-continuation
+            (lambda (exit-function)
+              (main-logic exit-function)))))))))
+
+(define (make-matrix rows cols)
+  (let loop((mat (make-vector rows)) (line (-1+ rows)))
+    (if (= -1 line)
+        mat
+        (begin
+          (vector-set! mat line (make-vector cols 0))
+          (loop mat (-1+ line))))))
+
+;; return the number of elements which match predicate
+(define (matrix-count mat pred)
+  (let loop((rows (vector->list mat)) (count 0))
+    (if (null? rows)
+        count
+        (loop (cdr rows)
+              (+ count (fold (lambda (n sum) (+ sum (if (pred n) 1 0)))
+                             0 (vector->list (car rows))))))))
+(assert (= 9 (matrix-count (make-matrix 3 3) zero?)))
+(assert (= 0 (matrix-count (make-matrix 3 3) positive?)))
