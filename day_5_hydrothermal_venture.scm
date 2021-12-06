@@ -14,6 +14,7 @@
                               "8,0 -> 0,8"
                               "9,4 -> 3,4"))))
 
+;; FIXME: shall generate a list of points instead (faster)
 (define-generator (make-vent-points-iterator vent)
   (let* ((start (car vent))
          (end (cdr vent))
@@ -39,19 +40,21 @@
   (assert (equal? '(3 . 9) (it)))
   (assert (equal? #f (it))))
 
-(define (build-vents-diagram vents)
+(define (count-dangerous-vents vents)
   (let* ((max-x (apply max (append (map caar vents) (map cadr vents))))
          (max-y (apply max (append (map cdar vents) (map cddr vents))))
          (diagram (make-matrix (1+ max-y) (1+ max-x))))
-    (let loop((vents vents))
+    (let loop((vents vents) (count 0))
       (if (null? vents)
-          diagram
+          count
           (let ((it (make-vent-points-iterator (car vents))))
             (do ((point (it) (it)))
                 ((not point) #f)
               ;;            (warn point)
-              (vector-inc! (vector-ref diagram (cdr point)) (car point)))
-            (loop (cdr vents)))))))
+              (vector-inc! (vector-ref diagram (cdr point)) (car point))
+              (if (= 2 (vector-ref (vector-ref diagram (cdr point)) (car point)))
+                  (set! count (1+ count))))
+            (loop (cdr vents) count))))))
 
 (define (straight-vent? vent)
   (or (= (caar vent) (cadr vent))
@@ -68,17 +71,13 @@
                      "3,4 -> 1,4"
                      "0,0 -> 8,8"
                      "5,5 -> 8,2"))
-(assert (= 5 (matrix-count (build-vents-diagram (filter straight-vent? (read-vents test-vents)))
-                           (lambda (n) (> n 1)))))
+(assert (= 5 (count-dangerous-vents (filter straight-vent? (read-vents test-vents)))))
 
 ;; part 1
-(matrix-count (build-vents-diagram (filter straight-vent? (read-vents (load-file "day_5_input.txt"))))
-              (lambda (n) (> n 1)))))
+(assert (= 5167 (count-dangerous-vents (filter straight-vent? (read-vents (load-file "day_5_input.txt"))))))
 
 
-(assert (= 12 (matrix-count (build-vents-diagram (read-vents test-vents))
-                            (lambda (n) (> n 1)))))
+(assert (= 12 (count-dangerous-vents (read-vents test-vents))))
 
 ;; part 2
-(assert (= 17604 (matrix-count (build-vents-diagram (read-vents (load-file "day_5_input.txt")))
-                               (lambda (n) (> n 1)))))
+(assert (= 17604 (count-dangerous-vents (read-vents (load-file "day_5_input.txt")))))
