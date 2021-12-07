@@ -76,53 +76,49 @@
 
 ;; return an iterator which take a list of numbers in arguments,
 ;; and yields the next winning grid and the remaining numbers (including the winning one)
-(define (winning-grids-iterator locations)
+(define-generator (winning-grids-iterator locations numbers)
   (let ((grids (make-equal-hash-table))
-        (won-grid (make-equal-hash-table)))
-    (lambda (numbers)
-      (call/cc
-       (lambda (yield)
-         (let play-numbers((numbers numbers))
-           (if (null? numbers)
-               (error "no numbers left!")
-               (let update-grids((ls (vector-ref locations (car numbers))))
-                 (unless (null? ls)
-                   (let* ((num (car numbers))
-                          (loc (car ls))
-                          (grid (hash-table/get grids (first loc) (cons (make-vector 5 5) (make-vector 5 5)))))
-                     (vector-dec! (car grid) (second loc))
-                     (vector-dec! (cdr grid) (third loc))
-                     (if (or (zero? (vector-ref (car grid) (second loc)))
-                             (zero? (vector-ref (cdr grid) (third loc))))
-                         (begin
-                           (if (not (hash-table/get won-grid (first loc) #f))
-                               (begin
-                                 (hash-table/put! won-grid (first loc) #t)
-                                 (yield (list (first loc) numbers))))))
-                     (hash-table/put! grids (first loc) grid)
-                     (update-grids (cdr ls))))
-                 (play-numbers (cdr numbers))))))))))
+        (grid-has-already-won (make-equal-hash-table)))
+    (let play-numbers((numbers numbers))
+      (if (null? numbers)
+          (yield #f)
+          (let update-grids((ls (vector-ref locations (car numbers))))
+            (unless (null? ls)
+              (let* ((num (car numbers))
+                     (loc (car ls))
+                     (grid (hash-table/get grids (first loc) (cons (make-vector 5 5) (make-vector 5 5)))))
+                (vector-dec! (car grid) (second loc))
+                (vector-dec! (cdr grid) (third loc))
+                (if (or (zero? (vector-ref (car grid) (second loc)))
+                        (zero? (vector-ref (cdr grid) (third loc))))
+                    (begin
+                      (if (not (hash-table/get grid-has-already-won (first loc) #f))
+                          (begin
+                            (hash-table/put! grid-has-already-won (first loc) #t)
+                            (yield (list (first loc) (car numbers) (cdr numbers)))))))
+                (hash-table/put! grids (first loc) grid)
+                (update-grids (cdr ls))))
+            (play-numbers (cdr numbers))))))))))
 
-;; play each number of the list numbers,
-;; until one of the grid referenced in locations wins
+;; play each number of the list <numbers>,
+;; until one of the grid referenced in <locations> wins
 (define (find-first-winning-grid locations numbers)
-  (let ((iterate (winning-grids-iterator locations)))
-    (iterate numbers)))
+  (let ((iterate (winning-grids-iterator locations numbers)))
+    (iterate)))
 
-(assert (equal? '(2 (24 10 16 13 6 15 25 12 22 18 20 8 19 3 26 1))
+(assert (equal? '(2 24 (10 16 13 6 15 25 12 22 18 20 8 19 3 26 1))
                 (find-first-winning-grid (read-grids test-grids)
                                          (map string->number
                                               (string-split "7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1" ",")))))
 
-(define (find-score locations grid-id numbers-left)
-  (let* ((winning-number (car numbers-left))
-         (numbers (filter (lambda (num) (find (lambda (pos) (= (car pos) grid-id))
+(define (find-score locations grid-id winning-number numbers-left)
+  (let* ((numbers (filter (lambda (num) (find (lambda (pos) (= (car pos) grid-id))
                                               (vector-ref locations num)))
-                          (cdr numbers-left))))
+                          numbers-left)))
     (* winning-number (apply + numbers))))
 
 (assert (= 4512 (find-score (read-grids test-grids)
-                            2 '(24 10 16 13 6 15 25 12 22 18 20 8 19 3 26 1))))
+                            2 24 '(10 16 13 6 15 25 12 22 18 20 8 19 3 26 1))))
 
   
 ;; part 1
@@ -131,27 +127,22 @@
                         (locations (read-grids (cdr lines)))
                         (result (find-first-winning-grid locations numbers))
                         (winning-grid (first result))
-                        (numbers-left (second result)))
-                   (find-score locations winning-grid numbers-left))))
+                        (winning-number (second result))
+                        (numbers-left (third result)))
+;;                   (warn winning-grid winning-number)
+                   (find-score locations winning-grid winning-number numbers-left))))
 
 
 ;; play each number of the list numbers,
 ;; until the last grid referenced in locations wins
 (define (find-last-winning-grid locations numbers)
-  (let* ((iterate (winning-grids-iterator locations))
-         (all-grid-ids (fold (lambda (locs ids) (append ids (map first locs)))
-                             '()
-                             (vector->list locations)))
-         (grid-count (length (uniq (sort all-grid-ids <)))))
-    (let count-grids((count grid-count) (numbers-left numbers))
-      (let ((result (iterate numbers-left)))
-        (warn result)
-        (if (= 1 count)
-            result
-            (count-grids (-1+ count)
-                         (cdr (second result))))))))
+  (let* ((iterate (winning-grids-iterator locations numbers)))
+    (let count-grids((last-result #f))
+      (let ((result (iterate)))
+        (if (not result) last-result
+            (count-grids result))))))
 
-(assert (equal? '(1 (13 6 15 25 12 22 18 20 8 19 3 26 1))
+(assert (equal? '(1 13 (6 15 25 12 22 18 20 8 19 3 26 1))
                 (find-last-winning-grid (read-grids test-grids)
                                          (map string->number
                                               (string-split "7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1" ",")))))
@@ -163,5 +154,7 @@
        (locations (read-grids (cdr lines)))
        (result (find-last-winning-grid locations numbers))
        (winning-grid (first result))
-       (numbers-left (second result)))
-  (find-score locations winning-grid numbers-left))))
+       (winning-number (second result))
+       (numbers-left (third result)))
+  (warn winning-grid winning-number)
+  (assert (= 13884 (find-score locations winning-grid winning-number numbers-left))))
