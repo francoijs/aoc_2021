@@ -109,6 +109,11 @@
             (lambda (exit-function)
               (main-logic exit-function)))))))))
 
+(define (iterator->list it)
+  (let loop((next (it)) (res '()))
+    (if (not next) res
+        (loop (it) (cons next res)))))
+
 (define (make-matrix rows cols)
   (let loop((mat (make-vector rows)) (line (-1+ rows)))
     (if (= -1 line)
@@ -127,3 +132,19 @@
                              0 (vector->list (car rows))))))))
 (assert (= 9 (matrix-count (make-matrix 3 3) zero?)))
 (assert (= 0 (matrix-count (make-matrix 3 3) positive?)))
+
+(define (matrix-height mat) (vector-length mat))
+(define (matrix-width mat) (vector-length (vector-ref mat 0)))
+
+; return element at row,col; def or error if out-of-bounds
+(define (matrix-ref mat row col #!optional def)
+  (cond ((and (< col (matrix-width mat))
+              (< row (matrix-height mat)))
+         (vector-ref (vector-ref mat row) col))
+        ((default-object? def) (error "matrix-ref: invalid pos" row col))
+        (else def)))
+
+(define (matrix-set! mat row col cell)
+  (assert (< row (matrix-height mat)))
+  (assert (< col (matrix-width mat)))
+  (vector-set! (vector-ref mat row) col cell))
