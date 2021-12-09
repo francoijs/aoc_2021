@@ -111,7 +111,7 @@
 
 (define (iterator->list it)
   (let loop((next (it)) (res '()))
-    (if (not next) res
+    (if (not next) (reverse res)
         (loop (it) (cons next res)))))
 
 (define (make-matrix rows cols)

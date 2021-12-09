@@ -30,8 +30,8 @@
 ;; (vector1 items may be only #f or lists of elements)
 (define (merge-vectors! vector1 vector2)
   (let ((vector1 (if (< (vector-length vector1) (vector-length vector2))
-                       (vector-grow vector1 (vector-length vector2))
-                       vector1)))
+                     (vector-grow vector1 (vector-length vector2))
+                     vector1)))
     (let add-elements((ls (vector->list vector2)) (index 0))
       (if (null? ls) vector1
           (let ((elt2 (car ls))
@@ -98,7 +98,7 @@
                             (yield (list (first loc) (car numbers) (cdr numbers)))))))
                 (hash-table/put! grids (first loc) grid)
                 (update-grids (cdr ls))))
-            (play-numbers (cdr numbers))))))))))
+            (play-numbers (cdr numbers)))))))
 
 ;; play each number of the list <numbers>,
 ;; until one of the grid referenced in <locations> wins
@@ -136,16 +136,12 @@
 ;; play each number of the list numbers,
 ;; until the last grid referenced in locations wins
 (define (find-last-winning-grid locations numbers)
-  (let* ((iterate (winning-grids-iterator locations numbers)))
-    (let count-grids((last-result #f))
-      (let ((result (iterate)))
-        (if (not result) last-result
-            (count-grids result))))))
+  (last (iterator->list (winning-grids-iterator locations numbers))))
 
 (assert (equal? '(1 13 (6 15 25 12 22 18 20 8 19 3 26 1))
                 (find-last-winning-grid (read-grids test-grids)
-                                         (map string->number
-                                              (string-split "7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1" ",")))))
+                                        (map string->number
+                                             (string-split "7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1" ",")))))
 
 
 ;; part 2
