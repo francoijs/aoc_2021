@@ -148,3 +148,6 @@
   (assert (< row (matrix-height mat)))
   (assert (< col (matrix-width mat)))
   (vector-set! (vector-ref mat row) col cell))
+
+(define (compose f1 f2)
+  (lambda (x) (f1 (f2 x))))
