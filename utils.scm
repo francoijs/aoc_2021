@@ -122,6 +122,28 @@
           (vector-set! mat line (make-vector cols 0))
           (loop mat (-1+ line))))))
 
+;; read matrix from a list of strings made of digits ; add lines and columns around with value 'border'
+(define (read-matrix-add-border lines border)
+  (let* ((matrix
+          (let loop((lines lines) (row 1) (matrix (make-vector 1 border)))
+            (if (null? lines) (vector-grow-set! matrix row #f)
+                (loop (cdr lines) (1+ row)
+                      (vector-grow-set! matrix row
+                                        (list->vector (append (list border)
+                                                              (map (lambda (c) (- (char->integer c)
+                                                                                  (char->integer #\0)))
+                                                                   (string->list (car lines)))
+                                                              (list border))))))))
+         (cols (vector-length (vector-ref matrix 1)))
+         (rows (matrix-height matrix)))
+    (vector-set! matrix 0 (make-vector cols border))
+    (vector-set! matrix (-1+ rows) (make-vector cols border))
+    matrix))
+
+(define (matrix-map proc mat)
+  (vector-map (lambda(v) (vector-map proc v))
+              mat))
+
 ;; return the number of elements which match predicate
 (define (matrix-count mat pred)
   (let loop((rows (vector->list mat)) (count 0))
@@ -148,6 +170,19 @@
   (assert (< row (matrix-height mat)))
   (assert (< col (matrix-width mat)))
   (vector-set! (vector-ref mat row) col cell))
+
+(define (matrix-inc! mat row col)
+  (vector-set! (vector-ref mat row) col (1+ (matrix-ref mat row col))))
+
+(define (matrix-for-each proc mat)
+  (let ((w (matrix-width mat))
+        (h (matrix-height mat)))
+    (let loop ((row 0) (col 0))
+      (unless (= h row)
+        (if (= w col)
+            (loop (1+ row) 0)
+            (begin (proc row col (matrix-ref mat row col))
+                   (loop row (1+ col))))))))
 
 (define (compose f1 f2)
   (lambda (x) (f1 (f2 x))))

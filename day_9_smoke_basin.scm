@@ -3,21 +3,7 @@
 (load "utils.scm")
 
 (define (read-heightmap lines)
-  (let* ((matrix
-          (let loop((lines lines) (row 1) (matrix (make-vector 1 #f)))
-            (if (null? lines) (vector-grow-set! matrix row #f)
-                (loop (cdr lines) (1+ row)
-                      (vector-grow-set! matrix row
-                                        (list->vector (append '(9)
-                                                              (map (lambda (c) (- (char->integer c)
-                                                                                  (char->integer #\0)))
-                                                                   (string->list (car lines)))
-                                                              '(9))))))))
-         (cols (vector-length (vector-ref matrix 1)))
-         (rows (matrix-height matrix)))
-    (vector-set! matrix 0 (make-vector cols 9))
-    (vector-set! matrix (-1+ rows) (make-vector cols 9))
-    matrix))
+  (read-matrix-add-border lines 9))
 
 (define (low-point? matrix row col)
   (let ((level (matrix-ref matrix row col)))
