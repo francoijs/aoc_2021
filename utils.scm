@@ -184,5 +184,29 @@
             (begin (proc row col (matrix-ref mat row col))
                    (loop row (1+ col))))))))
 
-(define (compose f1 f2)
-  (lambda (x) (f1 (f2 x))))
+(define-syntax compose
+  (syntax-rules ()
+    ((compose . funs)
+     (lambda (arg) (fold-right (lambda (fun result)
+                            (fun result))
+                          arg
+                          (list . funs))))))
+
+(define-syntax chain
+  (syntax-rules ()
+    ((compose arg . funs)
+     ((lambda (a) (fold (lambda (fun result) (fun result))
+                        a
+                        (list . funs))) arg))))
+
+(define (string-hash-table/copy table)
+  (fold (lambda (pair copy) (begin
+                              (hash-table/put! copy (car pair) (cdr pair))
+                              copy))
+        (make-string-hash-table)
+        (hash-table->alist table)))
+(let ((table (make-string-hash-table)))
+  (hash-table/put! table "toto" 1)
+  (hash-table/put! table "titi" 2)
+  (assert (= 1 (hash-table/get (string-hash-table/copy table) "toto" #f)))
+  (assert (= 2 (hash-table/get (string-hash-table/copy table) "titi" #f))))
