@@ -57,6 +57,16 @@
 (assert (equal? '() (list-split '("az") "az")))
 (assert (equal? '(("1") ("2" "3")) (list-split '("1" "az" "2" "3") "az")))
 
+(define (list-index-of ls obj)
+  (let loop ((index 0) (ls ls))
+    (cond ((null? ls) #f)
+          ((equal? obj (car ls)) index)
+          (else
+           (loop (1+ index) (cdr ls))))))
+(assert (eq? #f (list-index-of '(1 2 3) 0)))
+(assert (eq? 0 (list-index-of '(1 2 3) 1)))
+(assert (eq? 2 (list-index-of '(1 2 3) 3)))
+
 ;; set element of vector, expanding it if necessary
 (define (vector-grow-set! vec idx elt)
   (if (>= idx (vector-length vec))
@@ -73,6 +83,9 @@
   (vector-add! v i 1))
 (define (vector-dec! v i)
   (vector-add! v i -1))
+
+(define (vector-reverse v)
+  (list->vector (reverse (vector->list v))))
 
 ;; remove duplicates in a sorted list
 (define (uniq lst)
@@ -114,13 +127,15 @@
     (if (not next) (reverse res)
         (loop (it) (cons next res)))))
 
-(define (make-matrix rows cols)
+(define (make-matrix rows cols #!optional val)
   (let loop((mat (make-vector rows)) (line (-1+ rows)))
     (if (= -1 line)
         mat
         (begin
-          (vector-set! mat line (make-vector cols 0))
+          (vector-set! mat line (make-vector cols (if (default-object? val) 0 val)))
           (loop mat (-1+ line))))))
+(assert (= 1 (vector-ref (vector-ref (make-matrix 3 2 1) 2) 1)))
+(assert (= 0 (vector-ref (vector-ref (make-matrix 3 2) 2) 1)))
 
 ;; read matrix from a list of strings made of digits ; add lines and columns around with value 'border'
 (define (read-matrix-add-border lines border)
@@ -156,7 +171,7 @@
 (assert (= 0 (matrix-count (make-matrix 3 3) positive?)))
 
 (define (matrix-height mat) (vector-length mat))
-(define (matrix-width mat) (vector-length (vector-ref mat 0)))
+(define (matrix-width mat) (if (zero? (vector-length mat)) 0 (vector-length (vector-ref mat 0))))
 
 ; return element at row,col; def or error if out-of-bounds
 (define (matrix-ref mat row col #!optional def)
@@ -171,6 +186,21 @@
   (assert (< col (matrix-width mat)))
   (vector-set! (vector-ref mat row) col cell))
 
+(define (matrix-grow-set! mat row col cell)
+  (let ((row-vector (vector-grow-set!
+                     (if (< row (vector-length mat))
+                         (vector-ref mat row)
+                         (make-vector 0))
+                     col cell)))
+    (vector-map (lambda (row)
+                  (cond ((not row) (make-vector (vector-length row-vector)))
+                        ((> (vector-length row) (vector-length row-vector)) row)
+                        (else (vector-grow row (vector-length row-vector)))))
+                (vector-grow-set! mat row row-vector))))
+(assert (= 42 (matrix-ref (matrix-grow-set! (make-matrix 2 2) 0 0 42) 0 0)))
+(assert (= 42 (matrix-ref (matrix-grow-set! (make-matrix 0 0) 1 1 42) 1 1)))
+(assert (= 42 (matrix-ref (matrix-grow-set! (make-matrix 0 0) 0 0 42) 0 0)))
+
 (define (matrix-inc! mat row col)
   (vector-set! (vector-ref mat row) col (1+ (matrix-ref mat row col))))
 
@@ -183,6 +213,27 @@
             (loop (1+ row) 0)
             (begin (proc row col (matrix-ref mat row col))
                    (loop row (1+ col))))))))
+
+(define (submatrix mat row col subh subw)
+  (assert (<= (+ row subh) (matrix-height mat)))
+  (assert (<= (+ col subw) (matrix-width  mat)))
+  (vector-map (lambda(v)
+                (subvector v col (+ col subw)))
+              (subvector mat row (+ row subh))))
+
+; flip a matrix horizontally (dir=0), vertically (dir=1),
+; or diagonally (dir=2)
+(define (matrix-flip mat #!optional dir)
+  (cond
+   ((or (default-object? dir) (= dir 0))
+    (vector-map vector-reverse mat))
+   ((= dir 1) (vector-reverse mat))
+   (else
+;    (assert (matrix-square? mat))
+    (vector-map (lambda(n)
+                  (vector-map (lambda(l) (vector-ref l n))
+                              mat))
+                (list->vector (iota (matrix-width mat)))))))
 
 (define-syntax compose
   (syntax-rules ()
