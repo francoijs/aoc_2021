@@ -250,6 +250,23 @@
                         a
                         (list . funs))) arg))))
 
+(define (hash-table/add! table key added)
+  (let ((val (hash-table/get table key 0)))
+    (assert (number? val))
+    (hash-table/put! table key (+ val added))
+    table))
+(define (hash-table/inc! table key)
+  (hash-table/add! table key 1))
+(define (hash-table/dec! table key)
+  (hash-table/add! table key -1))
+
+(define (hash-table/copy table)
+  (fold (lambda (pair copy) (begin
+                              (hash-table/put! copy (car pair) (cdr pair))
+                              copy))
+        (make-equal-hash-table)
+        (hash-table->alist table)))
+
 (define (string-hash-table/copy table)
   (fold (lambda (pair copy) (begin
                               (hash-table/put! copy (car pair) (cdr pair))
