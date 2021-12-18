@@ -155,9 +155,29 @@
     (vector-set! matrix (-1+ rows) (make-vector cols border))
     matrix))
 
+(define (read-matrix lines)
+  (let loop((lines lines) (row 0) (matrix (make-vector 0 0)))
+    (if (null? lines) matrix
+        (loop (cdr lines) (1+ row)
+              (vector-grow-set! matrix row
+                                (list->vector (map (lambda (c) (- (char->integer c)
+                                                                  (char->integer #\0)))
+                                                   (string->list (car lines)))))))))
+
+(define (build-matrix rows cols proc)
+  (let loop((mat (make-vector rows)) (row (-1+ rows)))
+    (if (< row 0) mat
+        (begin
+          (vector-set! mat row (make-initialized-vector
+                                cols (lambda (col) (proc row col))))
+          (loop mat (-1+ row))))))
+
 (define (matrix-map proc mat)
   (vector-map (lambda(v) (vector-map proc v))
               mat))
+
+(define (matrix-copy mat)
+  (vector-map vector-copy mat))
 
 ;; return the number of elements which match predicate
 (define (matrix-count mat pred)
