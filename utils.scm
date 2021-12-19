@@ -67,6 +67,10 @@
 (assert (eq? 0 (list-index-of '(1 2 3) 1)))
 (assert (eq? 2 (list-index-of '(1 2 3) 3)))
 
+(define set-first! set-car!)
+(define set-second! (lambda (l x) (set-cdr! l (cons x (list-tail l 2)))))
+(define set-third! (lambda (l x) (set-cdr! (cdr l) (cons x (list-tail l 3)))))
+
 ;; set element of vector, expanding it if necessary
 (define (vector-grow-set! vec idx elt)
   (if (>= idx (vector-length vec))
