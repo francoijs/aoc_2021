@@ -71,6 +71,11 @@
 (define set-second! (lambda (l x) (set-cdr! l (cons x (list-tail l 2)))))
 (define set-third! (lambda (l x) (set-cdr! (cdr l) (cons x (list-tail l 3)))))
 
+(define (vector-set vec k obj)
+  (let ((vec (vector-copy vec)))
+    (vector-set! vec k obj)
+    vec))
+
 ;; set element of vector, expanding it if necessary
 (define (vector-grow-set! vec idx elt)
   (if (>= idx (vector-length vec))
@@ -159,14 +164,17 @@
     (vector-set! matrix (-1+ rows) (make-vector cols border))
     matrix))
 
-(define (read-matrix lines)
-  (let loop((lines lines) (row 0) (matrix (make-vector 0 0)))
-    (if (null? lines) matrix
-        (loop (cdr lines) (1+ row)
-              (vector-grow-set! matrix row
-                                (list->vector (map (lambda (c) (- (char->integer c)
-                                                                  (char->integer #\0)))
-                                                   (string->list (car lines)))))))))
+(define (read-matrix lines . conv)
+  (let ((conv (if (null? conv)
+                  (lambda (c) (- (char->integer c)
+                                 (char->integer #\0)))
+                 (car conv))))
+    (let loop((lines lines) (row 0) (matrix (make-vector 0 0)))
+      (if (null? lines) matrix
+          (loop (cdr lines) (1+ row)
+                (vector-grow-set! matrix row
+                                  (list->vector (map conv
+                                                 (string->list (car lines))))))))))
 
 (define (build-matrix rows cols proc)
   (let loop((mat (make-vector rows)) (row (-1+ rows)))
@@ -196,6 +204,7 @@
 
 (define (matrix-height mat) (vector-length mat))
 (define (matrix-width mat) (if (zero? (vector-length mat)) 0 (vector-length (vector-ref mat 0))))
+(define (matrix-dimensions mat) (cons (matrix-height mat) (matrix-width mat)))
 
 ; return element at row,col; def or error if out-of-bounds
 (define (matrix-ref mat row col #!optional def)
@@ -245,8 +254,18 @@
                 (subvector v col (+ col subw)))
               (subvector mat row (+ row subh))))
 
-; flip a matrix horizontally (dir=0), vertically (dir=1),
-; or diagonally (dir=2)
+(define (submatrix-copy! mat0 r0 c0 h w mat1 r1 c1)
+  (assert (<= 0 (+ r0 h) (matrix-height mat0)))
+  (assert (<= 0 (+ c0 w) (matrix-width  mat0)))
+  (assert (<= 0 (+ r1 h) (matrix-height mat1)))
+  (assert (<= 0 (+ c1 w) (matrix-width  mat1)))
+  (matrix-for-each (lambda (r c val)
+                     (matrix-set! mat1 (+ r1 (- r r0))
+                                  (+ c1 (- c c0)) val))
+                   (submatrix mat0 r0 c0 h w)))
+
+;; flip a matrix horizontally (dir=0), vertically (dir=1),
+;; or diagonally (dir=2)
 (define (matrix-flip mat #!optional dir)
   (cond
    ((or (default-object? dir) (= dir 0))
@@ -258,6 +277,27 @@
                   (vector-map (lambda(l) (vector-ref l n))
                               mat))
                 (list->vector (iota (matrix-width mat)))))))
+
+(define (matrix-equal? m1 m2)
+  (call/cc
+   (lambda (return)
+     (matrix-for-each (lambda (y x obj)
+                        (if (not (equal? obj
+                                         (matrix-ref m2 y x)))
+                            (return #f)))
+                      m1)
+     (return #t))))
+
+(define (display-bit-matrix mat)
+  (newline)
+  (for-each (lambda (row) (begin
+                            (vector-map (compose display (lambda (b) (if b "#" ".")))
+                                        row)
+                            (newline)))                    
+            (vector->list mat)))
+
+
+(define identity (lambda (x) x))
 
 (define-syntax compose
   (syntax-rules ()
@@ -302,3 +342,10 @@
   (hash-table/put! table "titi" 2)
   (assert (= 1 (hash-table/get (string-hash-table/copy table) "toto" #f)))
   (assert (= 2 (hash-table/get (string-hash-table/copy table) "titi" #f))))
+
+(define (bit-string-map proc bs)
+  (let ((len (bit-string-length bs)))
+    (fold (lambda (idx ls) (cons (proc (bit-string-ref bs idx)) ls))
+          '()
+          (iota len))))
+(assert (equal? '(#t #f #t #f) (bit-string-map identity (unsigned-integer->bit-string 4 10))))
