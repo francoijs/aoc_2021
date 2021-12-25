@@ -10,12 +10,6 @@
                 (read-char)
                 (cons line (loop)))))))))
 
-(define (curry1 fun arg1)
-  (lambda (arg2) (fun arg1 arg2)))
-(define curry curry1)
-(define (curry2 fun arg2)
-  (lambda (arg1) (fun arg1 arg2)))
-
 ;; split str in list of tokens delimited by the chars of delims
 (define (string-split str delims)
   (let ((delims (string->char-set delims)))
@@ -42,7 +36,7 @@
          (loop (cdr ls))))))
 (assert (equal? '(1 2 3 4) (list-flatten '(1 (2 (3)) (4)))))
 
-;; split a list of strings, separated by delim-str, in a list of lists
+;; split a list of strings, separated by delim-str, into a list of lists
 (define (list-split ls delim-str)
   (if (null? ls) '()
       (let loop((ls ls) (group '()))
@@ -183,6 +177,7 @@
           (vector-set! mat row (make-initialized-vector
                                 cols (lambda (col) (proc row col))))
           (loop mat (-1+ row))))))
+(define make-initialized-matrix build-matrix)
 
 (define (matrix-map proc mat)
   (vector-map (lambda(v) (vector-map proc v))
@@ -246,6 +241,14 @@
             (loop (1+ row) 0)
             (begin (proc row col (matrix-ref mat row col))
                    (loop row (1+ col))))))))
+
+(define (matrix-fold proc accu0 mat)
+  (let ((accu accu0))
+    (matrix-for-each (lambda (r c obj)
+                       (set! accu (proc obj accu)))
+                     mat)
+    accu))
+(assert (= 4 (matrix-fold + 0 (make-initialized-matrix 2 2 +))))
 
 (define (submatrix mat row col subh subw)
   (assert (<= (+ row subh) (matrix-height mat)))
@@ -314,6 +317,14 @@
                         a
                         (list . funs))) arg))))
 
+(define (curry func . curry-args)
+  (lambda args
+    (apply func (append curry-args args))))
+
+(define (right-curry func . curry-args)
+  (lambda args
+    (apply func (append args curry-args))))
+
 (define (hash-table/add! table key added)
   (let ((val (hash-table/get table key 0)))
     (assert (number? val))
@@ -349,3 +360,29 @@
           '()
           (iota len))))
 (assert (equal? '(#t #f #t #f) (bit-string-map identity (unsigned-integer->bit-string 4 10))))
+
+(define (bit-string-mod-range bs start end proc)
+  (let ((bs1 (unsigned-integer->bit-string
+              (bit-string-length bs)
+              (- (expt 2 end) (expt 2 start)))))
+    (proc bs bs1)))
+
+(define bit-string-set-range! (right-curry bit-string-mod-range bit-string-or!))
+(define bit-string-set-range (right-curry bit-string-mod-range bit-string-or))
+(assert (equal? '#*10111110 (bit-string-set-range '#*10101010 1 5)))
+(define bit-string-clear-range! (right-curry bit-string-mod-range bit-string-andc!))
+(define bit-string-clear-range (right-curry bit-string-mod-range bit-string-andc))
+(assert (equal? '#*10100000 (bit-string-clear-range '#*10101010 1 5)))
+
+(define u2bs unsigned-integer->bit-string)
+(define bs2u bit-string->unsigned-integer)
+
+(define (bit-string-count-ones bs0)
+  (let loop ((bs bs0) (count 0))
+    (if (bit-string-zero? bs)
+        count
+        (loop (bit-string-and bs (u2bs (bit-string-length bs0)
+                                       (-1+ (bs2u bs))))
+              (1+ count)))))
+(assert (= 2 (bit-string-count-ones '#*010100)))
+(assert (= 4 (bit-string-count-ones '#*011101)))
