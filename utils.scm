@@ -80,6 +80,18 @@
    (else (cons (car lst) (uniq (cdr lst))))))
 (assert (equal? '(1 2 3) (uniq '(1 2 2 3 3 3))))
 
+(define (integer->list digits n)
+  (let ((res (let loop((n n))
+               (if (zero? n) '()
+                   (cons (modulo n 10) (loop (quotient n 10)))))))
+    (append (make-list (- digits (length res)) 0) (reverse res))))
+(assert (equal? '(0 1 2 3 4) (integer->list 5 1234)))
+
+(define (list->integer ls)
+  (fold (lambda (d s) (+ (* 10 s) d))
+        0 ls))
+(assert (equal? 1234 (list->integer '(0 1 2 3 4))))
+
 ;;
 ;; VECTORS
 ;;
@@ -388,6 +400,9 @@
   (lambda args
     (apply func (append args curry-args))))
 
+;;
+;; OTHER
+;;
 ; generators
 ; https://gist.github.com/zeeshanlakhani/1254439
 (define-syntax define-generator
@@ -418,3 +433,22 @@
   (let loop((next (it)) (res '()))
     (if (not next) (reverse res)
         (loop (it) (cons next res)))))
+
+(define (combinations ls n)
+  (cond
+   ((zero? n) '(()))
+   ((>= n (length ls)) (list ls))
+   (else (append
+          (combinations (cdr ls) n)
+          (map (lambda (comb)
+                 (cons (car ls) comb))
+               (combinations (cdr ls) (-1+ n)))))))
+(assert (equal? '((2 3) (1 3) (1 2)) (combinations '(1 2 3) 2)))
+
+(define (accessor col)
+  (let ((proc (cond ((vector? col) vector-ref)
+                    ((list? col) list-ref)
+                    ((bit-string? col) bit-string-ref)
+                    (else
+                     (error "unknown collection type for" col)))))
+    (lambda (i) (proc col i))))
