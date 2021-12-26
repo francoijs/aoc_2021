@@ -1,3 +1,6 @@
+;;
+;; STRINGS
+;;
 ;; load file and return list of strings (1 per line)
 (define (load-file fname)
   (with-input-from-file fname
@@ -26,6 +29,9 @@
 (assert (equal? '("12" "3" "456")
                 (string-split ",12 3,456 " " ,")))
 
+;;
+;; LISTS
+;;
 (define (list-flatten ls)
   (let loop((ls ls))
     (if (null? ls) '()
@@ -65,6 +71,18 @@
 (define set-second! (lambda (l x) (set-cdr! l (cons x (list-tail l 2)))))
 (define set-third! (lambda (l x) (set-cdr! (cdr l) (cons x (list-tail l 3)))))
 
+;; remove duplicates in a sorted list
+(define (uniq lst)
+  (cond
+   ((null? lst) '())
+   ((null? (cdr lst)) lst)
+   ((equal? (car lst) (cadr lst)) (uniq (cdr lst)))
+   (else (cons (car lst) (uniq (cdr lst))))))
+(assert (equal? '(1 2 3) (uniq '(1 2 2 3 3 3))))
+
+;;
+;; VECTORS
+;;
 (define (vector-set vec k obj)
   (let ((vec (vector-copy vec)))
     (vector-set! vec k obj)
@@ -90,46 +108,9 @@
 (define (vector-reverse v)
   (list->vector (reverse (vector->list v))))
 
-;; remove duplicates in a sorted list
-(define (uniq lst)
-  (cond
-   ((null? lst) '())
-   ((null? (cdr lst)) lst)
-   ((equal? (car lst) (cadr lst)) (uniq (cdr lst)))
-   (else (cons (car lst) (uniq (cdr lst))))))
-(assert (equal? '(1 2 3) (uniq '(1 2 2 3 3 3))))
-
-; generators
-; https://gist.github.com/zeeshanlakhani/1254439
-(define-syntax define-generator
-  (syntax-rules ()
-    ((_ (name arg1 ...) body1 ...)
-     (define (name arg1 ...)
-       (letrec ((main-logic
-                 (lambda (suspend)
-                   ;; we're just turning it into a function that
-                   ;; can be called within the expanded code.
-                   (let ((yield
-                          (lambda v
-                            (begin
-                              (call-with-current-continuation
-                               (lambda (new-bail)
-                                 (set! main-logic (lambda (cont)
-                                                    (set! suspend cont)
-                                                    (apply new-bail v)))
-                                 (apply suspend v)))))))
-                     (let name ((arg1 arg1) ...)
-                       body1 ...)))))
-         (lambda ()
-           (call-with-current-continuation
-            (lambda (exit-function)
-              (main-logic exit-function)))))))))
-
-(define (iterator->list it)
-  (let loop((next (it)) (res '()))
-    (if (not next) (reverse res)
-        (loop (it) (cons next res)))))
-
+;;
+;; MATRICES
+;;
 (define (make-matrix rows cols #!optional val)
   (let loop((mat (make-vector rows)) (line (-1+ rows)))
     (if (= -1 line)
@@ -291,6 +272,18 @@
                       m1)
      (return #t))))
 
+(define (display-matrix mat . proc)
+  (let ((proc (if (null? proc)
+                  (lambda (n) (digit->char n))
+                  (car proc))))
+    (newline)
+    (for-each (lambda (row)
+                (begin
+                  (vector-map (compose display proc)
+                              row)
+                  (newline)))                    
+              (vector->list mat))))
+
 (define (display-bit-matrix mat)
   (newline)
   (for-each (lambda (row) (begin
@@ -299,32 +292,9 @@
                             (newline)))                    
             (vector->list mat)))
 
-
-(define identity (lambda (x) x))
-
-(define-syntax compose
-  (syntax-rules ()
-    ((compose . funs)
-     (lambda (arg) (fold-right (lambda (fun result)
-                            (fun result))
-                          arg
-                          (list . funs))))))
-
-(define-syntax chain
-  (syntax-rules ()
-    ((compose arg . funs)
-     ((lambda (a) (fold (lambda (fun result) (fun result))
-                        a
-                        (list . funs))) arg))))
-
-(define (curry func . curry-args)
-  (lambda args
-    (apply func (append curry-args args))))
-
-(define (right-curry func . curry-args)
-  (lambda args
-    (apply func (append args curry-args))))
-
+;;
+;; HASH-TABLES
+;;
 (define (hash-table/add! table key added)
   (let ((val (hash-table/get table key 0)))
     (assert (number? val))
@@ -354,6 +324,9 @@
   (assert (= 1 (hash-table/get (string-hash-table/copy table) "toto" #f)))
   (assert (= 2 (hash-table/get (string-hash-table/copy table) "titi" #f))))
 
+;;
+;; BIT-STRINGS
+;;
 (define (bit-string-map proc bs)
   (let ((len (bit-string-length bs)))
     (fold (lambda (idx ls) (cons (proc (bit-string-ref bs idx)) ls))
@@ -386,3 +359,62 @@
               (1+ count)))))
 (assert (= 2 (bit-string-count-ones '#*010100)))
 (assert (= 4 (bit-string-count-ones '#*011101)))
+
+;;
+;; FP
+;;
+(define identity (lambda (x) x))
+
+(define-syntax compose
+  (syntax-rules ()
+    ((compose . funs)
+     (lambda (arg) (fold-right (lambda (fun result)
+                            (fun result))
+                          arg
+                          (list . funs))))))
+
+(define-syntax chain
+  (syntax-rules ()
+    ((compose arg . funs)
+     ((lambda (a) (fold (lambda (fun result) (fun result))
+                        a
+                        (list . funs))) arg))))
+
+(define (curry func . curry-args)
+  (lambda args
+    (apply func (append curry-args args))))
+
+(define (right-curry func . curry-args)
+  (lambda args
+    (apply func (append args curry-args))))
+
+; generators
+; https://gist.github.com/zeeshanlakhani/1254439
+(define-syntax define-generator
+  (syntax-rules ()
+    ((_ (name arg1 ...) body1 ...)
+     (define (name arg1 ...)
+       (letrec ((main-logic
+                 (lambda (suspend)
+                   ;; we're just turning it into a function that
+                   ;; can be called within the expanded code.
+                   (let ((yield
+                          (lambda v
+                            (begin
+                              (call-with-current-continuation
+                               (lambda (new-bail)
+                                 (set! main-logic (lambda (cont)
+                                                    (set! suspend cont)
+                                                    (apply new-bail v)))
+                                 (apply suspend v)))))))
+                     (let name ((arg1 arg1) ...)
+                       body1 ...)))))
+         (lambda ()
+           (call-with-current-continuation
+            (lambda (exit-function)
+              (main-logic exit-function)))))))))
+
+(define (iterator->list it)
+  (let loop((next (it)) (res '()))
+    (if (not next) (reverse res)
+        (loop (it) (cons next res)))))

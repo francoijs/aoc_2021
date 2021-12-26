@@ -12,7 +12,7 @@
 
 (define (most-common-bit ls index)
   (<= (/ (length ls) 2)
-      (apply + (map (curry2 vector-ref index) ls))))
+      (apply + (map (right-curry vector-ref index) ls))))
 (define least-common-bit (lambda (ls index) (not (most-common-bit ls index))))
 
 (assert (least-common-bit '(#(0 0 1 0 0)
