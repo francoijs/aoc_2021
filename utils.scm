@@ -67,6 +67,12 @@
 (assert (eq? 0 (list-index-of '(1 2 3) 1)))
 (assert (eq? 2 (list-index-of '(1 2 3) 3)))
 
+;; swap elements at index i and j
+(define (list-swap! ls i j)
+  (let ((tmp (list-ref ls i)))
+    (list-set! ls i (list-ref ls j))
+    (list-set! ls j tmp)))
+
 (define set-first! set-car!)
 (define set-second! (lambda (l x) (set-cdr! l (cons x (list-tail l 2)))))
 (define set-third! (lambda (l x) (set-cdr! (cdr l) (cons x (list-tail l 3)))))
@@ -79,6 +85,18 @@
    ((equal? (car lst) (cadr lst)) (uniq (cdr lst)))
    (else (cons (car lst) (uniq (cdr lst))))))
 (assert (equal? '(1 2 3) (uniq '(1 2 2 3 3 3))))
+
+;; intersection of 2 sorted lists
+(define (intersect ls1 ls2 cmp)
+  (let loop ((ls1 (sort ls1 cmp)) (ls2 (sort ls2 cmp)))
+    (cond ((or (null? ls1) (null? ls2)) '())
+          ((cmp (car ls1) (car ls2)) (loop (cdr ls1) ls2))
+          ((cmp (car ls2) (car ls1)) (loop ls1 (cdr ls2)))
+          (else (cons (car ls1)
+                      (loop (cdr ls1) (cdr ls2)))))))
+(assert (equal? '() (intersect '(1 2) '(3 4) <)))
+(assert (equal? '(2) (intersect '(1 2 3) '(2 4 5) <)))
+(assert (equal? '(1 2) (intersect '(1 2) '(1 2 2 4) <)))
 
 (define (integer->list digits n)
   (let ((res (let loop((n n))
@@ -119,6 +137,13 @@
 
 (define (vector-reverse v)
   (list->vector (reverse (vector->list v))))
+
+(define (vector-mult v1 v2)
+  (assert (= (vector-length v1) (vector-length v2)))
+  (fold (lambda (i sum) (+ sum (* (vector-ref v1 i)
+                                  (vector-ref v2 i))))
+        0 (iota (vector-length v1))))
+(assert (= 10 (vector-mult '#(1 2 3) '#(3 2 1))))
 
 ;;
 ;; MATRICES
@@ -274,6 +299,35 @@
                               mat))
                 (list->vector (iota (matrix-width mat)))))))
 
+(define (matrix-mult m1 m2)
+  (let* ((h (matrix-height m1))
+         (w (matrix-width m1))
+         (res (make-matrix h w)))
+    (assert (= w (matrix-height m2)))
+    (assert (= h (matrix-width m2)))
+    (matrix-for-each
+     (lambda (row col _)
+       (matrix-set!
+        res row col
+        (fold (lambda (i sum)
+                (+ sum (* (matrix-ref m1 row i)
+                          (matrix-ref m2 i col))))
+              0 (iota w))))
+     res)
+    res))
+(assert (equal? '#(#(-1 1) #(-1 1))
+                (matrix-mult '#(#(1 2) #(3 4)) '#(#(1 -1) #(-1 1)))))
+
+(define (matrix-mult-vector m vec)
+  (let* ((h (matrix-height m))
+         (w (matrix-width m)))
+    (assert (= w (vector-length vec)))
+    (fold (lambda (i res)
+            (vector-set res i (vector-mult (vector-ref m i) vec)))
+          (make-vector h 0)
+          (iota h))))
+(assert (equal? '#(-1 1) (matrix-mult-vector '#(#(1 -1) #(-1 1)) '#(2 3))))
+
 (define (matrix-equal? m1 m2)
   (call/cc
    (lambda (return)
@@ -337,6 +391,28 @@
   (assert (= 2 (hash-table/get (string-hash-table/copy table) "titi" #f))))
 
 ;;
+;; SETS
+;;
+(define make-set make-equal-hash-table)
+(define (set/has? set elt)
+  (hash-table/get set elt #f))
+(define (set/insert! set elt)
+  (unless (set/has? set elt)
+    (hash-table/put! set elt #t)))
+(define (set/pop! set)
+  (let ((ls (hash-table/key-list set)))
+    (if (null? ls) #f
+        (begin
+          (hash-table/remove! set (car ls))
+          (car ls)))))
+
+(define (list->set ls)
+  (fold (lambda (obj set) (begin (set/insert! set obj) set))
+        (make-set) ls))
+(define (set->list set)
+  (hash-table-keys set))
+
+;;
 ;; BIT-STRINGS
 ;;
 (define (bit-string-map proc bs)
@@ -376,10 +452,11 @@
 ;; FP
 ;;
 (define identity (lambda (x) x))
+(define (invert x) (* -1 x))
 
 (define-syntax compose
   (syntax-rules ()
-    ((compose . funs)
+    ((_ . funs)
      (lambda (arg) (fold-right (lambda (fun result)
                             (fun result))
                           arg
@@ -387,7 +464,7 @@
 
 (define-syntax chain
   (syntax-rules ()
-    ((compose arg . funs)
+    ((_ arg . funs)
      ((lambda (a) (fold (lambda (fun result) (fun result))
                         a
                         (list . funs))) arg))))
@@ -395,10 +472,25 @@
 (define (curry func . curry-args)
   (lambda args
     (apply func (append curry-args args))))
-
+(define left-curry curry)
 (define (right-curry func . curry-args)
   (lambda args
     (apply func (append args curry-args))))
+
+(define-syntax define-memoized
+  (syntax-rules ()
+    ((_ (name arg1 ...) body1 ...)
+     (define-memoized 10 (name arg1 ...) body1 ...))
+    ((_ size (name arg1 ...) body1 ...)
+     (define name
+       (let ((cache (make-equal-hash-table size)))
+         (lambda (arg1 ...)
+           (let ((cached (hash-table/get cache (list arg1 ...) #f)))
+;;             (when cached (display "cached!"))
+             (or cached
+                 (let ((result body1 ...))
+                   (hash-table/put! cache (list arg1 ...) result)
+                   result)))))))))
 
 ;;
 ;; OTHER
@@ -444,6 +536,33 @@
                  (cons (car ls) comb))
                (combinations (cdr ls) (-1+ n)))))))
 (assert (equal? '((2 3) (1 3) (1 2)) (combinations '(1 2 3) 2)))
+
+; https://stackoverflow.com/questions/35869763/implementation-of-heaps-algorithm-in-scheme-permutation-generation
+(define (permutations ls)
+  (let ((res '()))
+    (define (generate k ls)
+      (if (= k 1)
+          (set! res (append res (list (list-copy ls))))
+          (let loop((i 0))
+            (generate (-1+ k) ls)
+            (if (even? k)
+                (list-swap! ls i (-1+ k))
+                (list-swap! ls 0 (-1+ k)))
+            (if (< i (- k 2))
+                (loop (1+ i))
+                (generate (-1+ k) ls)))))
+    (if (null? ls) '()
+        (generate (length ls) (list-copy ls)))
+    res))
+
+(define (possibilities ls n)
+  (cond ((zero? n) '())
+        ((= 1 n) (map list ls))
+        (else
+         (apply append (map (lambda (obj)
+                              (map (lambda (pos) (cons obj pos))
+                                   (possibilities ls (-1+ n))))
+                            ls)))))
 
 (define (accessor col)
   (let ((proc (cond ((vector? col) vector-ref)
