@@ -2,13 +2,7 @@
 
 (load "utils.scm")
 
-(define-record-type :area
-  (make-area x-min x-max y-min y-max)
-  area?
-  (x-min area:x-min)
-  (x-max area:x-max)
-  (y-min area:y-min)
-  (y-max area:y-max))
+(define-structure (area (type list)) x-min x-max y-min y-max)
 
 (define (read-area lines)
   (let* ((tokens (string-split (car lines) "=.,"))
@@ -19,36 +13,30 @@
     (make-area x-min x-max y-min y-max)))
 (define *test-area* (read-area '("target area: x=20..30, y=-10..-5")))
 
-(define-record-type :probe-state
-  (make-probe-state x y vx vy)
-  probe-state?
-  (x probe-state:x)
-  (y probe-state:y)
-  (vx probe-state:vx)
-  (vy probe-state:vy))
+(define-structure probe-state x y vx vy)
 
 (define (probe/inside? st area)
-  (and (<= (area:x-min area) (probe-state:x st) (area:x-max area))
-       (<= (area:y-min area) (probe-state:y st) (area:y-max area))))
+  (and (<= (area-x-min area) (probe-state-x st) (area-x-max area))
+       (<= (area-y-min area) (probe-state-y st) (area-y-max area))))
 (assert (probe/inside? (make-probe-state 4 5 0 0)
                        (make-area 3 4 5 6)))
 (assert (not (probe/inside? (make-probe-state 5 5 0 0)
                             (make-area 3 4 5 6))))
 
 (define (probe/above? st area)
-  (< (area:y-max area) (probe-state:y st)))
+  (< (area-y-max area) (probe-state-y st)))
 (define (probe/below? st area)
-  (> (area:y-min area) (probe-state:y st)))
+  (> (area-y-min area) (probe-state-y st)))
 (define (probe/too-long? st area)
-  (< (area:x-max area) (probe-state:x st)))
+  (< (area-x-max area) (probe-state-x st)))
 (define (probe/too-short? st area)
-  (> (area:x-min area) (probe-state:x st)))
+  (> (area-x-min area) (probe-state-x st)))
 
 (define (probe/step st)
-  (let ((x (+ (probe-state:x st) (probe-state:vx st)))
-        (y (+ (probe-state:y st) (probe-state:vy st)))
-        (vx (max 0 (-1+ (probe-state:vx st))))
-        (vy (-1+ (probe-state:vy st))))
+  (let ((x (+ (probe-state-x st) (probe-state-vx st)))
+        (y (+ (probe-state-y st) (probe-state-vy st)))
+        (vx (max 0 (-1+ (probe-state-vx st))))
+        (vy (-1+ (probe-state-vy st))))
     (make-probe-state x y vx vy)))
 
 ;; simulate trajectory with given initial velocity
@@ -62,65 +50,34 @@
              ((probe/below? st area) (return #f))
              (else
               (iter (probe/step st)
-                    (max max-y (probe-state:y st)))))))))
+                    (max max-y (probe-state-y st)))))))))
 (assert (probe/send 7 2 *test-area*))
 (assert (probe/send 6 3 *test-area*))
 (assert (probe/send 9 0 *test-area*))
 (assert (not (probe/send 17 -4 *test-area*)))
 (assert (= 45 (probe/send 6 9 *test-area*)))
 
-;; starting from an initial velocity that do not hit target area,
-;; look for any (vx . vy) that does
-(define (find-hit-trajectory vx vy area)
-  ;  (warn vx vy)
-  (let iter ((st (make-probe-state 0 0 vx vy)))
-    (cond ((probe/inside? st area) (cons vx vy))
-          ((probe/below? st area)
-           (find-hit-trajectory (+ vx (if (probe/too-short? st area) 1 -1))
-                                vy
-                                area))
+;; try all trajectories for vx,vy in [0, x-max],[y-max, - y-max]
+(define (find-highest-trajectory area)
+  (assert (negative? (area-y-min area)))
+  (let loop ((vx (area-x-max area))
+             (vy (* -1 (area-y-min area)))
+             (max-alt 0)
+             (count 0))
+    (cond ((< vy (area-y-min area)) (cons max-alt count))
+          ((zero? vx) (loop (area-x-max area) (-1+ vy) max-alt count))
           (else
-           (iter (probe/step st))))))
-(assert (equal? '(6 . 5) (find-hit-trajectory 5 5 *test-area*)))
-
-;; perform steepest ascent on probe/send(vy, vy)
-(define (find-highest-trajectory vx0 vy0 area)
-  
-  ;; trajectory = (vx vy alt)
-  (define (adjacent-trajectories vx vy)
-    (let next-adj ((dx -1) (dy -1) (res '())) ; iterate dx & dy over [-1 0 1]
-      (cond ((= dx 2) res)
-            ((= dy 2) (next-adj (1+ dx) -1 res))
-            ((= 0 dx dy) (next-adj dx (1+ dy) res)) 
-            (else
-             (let* ((vx (+ vx dx))
-                    (vy (+ vy dy))
-                    (alt (probe/send vx vy area)))
-               (next-adj dx (1+ dy) (if alt
-                                        (cons (list vx vy alt) res)
-                                        res)))))))
-  (define (trajectory-cmp t1 t2)
-    (> (third t1) (third t2)))
-  
-  ;; find initial trajectory that hit the target
-  (let* ((vel0 (find-hit-trajectory vx0 vy0 area))
-         (vx0 (car vel0))
-         (vy0 (cdr vel0)))
-    
-    (let ascent ((vx vx0) (vy vy0) (visited '()))
-      (let ((alt (probe/send vx vy area))
-            (adj (sort (adjacent-trajectories vx vy)
-                       trajectory-cmp)))
-        ;      (warn vx vy alt adj)
-        (if (or (null? adj)                    ; no neighbor reaches the target
-                (< (third (car adj)) alt)      ; no better neighbor
-                (member (cons vx vy) visited)) ; solution was already visited
-            (list vx vy alt)
-            (ascent (first (car adj)) (second (car adj))
-                    (cons (cons vx vy) visited)))))))
-(assert (equal? '(7 9 45) (find-highest-trajectory 7 2 *test-area*)))
+           (let ((alt (probe/send vx vy area)))
+             (loop (-1+ vx) vy
+                   (max max-alt (or alt 0))
+                   (+ count (if alt 1 0))))))))
+(assert (= 45 (car (find-highest-trajectory *test-area*))))
 
 ;; part 1
-(let* ((area (read-area (load-file "day_17_input.txt")))
-       (vi (find-hit-trajectory 15 15 area)))
-  (find-highest-trajectory (car vi) (cdr vi) area))
+(assert (= 15400 (car (find-highest-trajectory
+                       (read-area (load-file "day_17_input.txt"))))))
+
+;; part 2
+(assert (= 112 (cdr (find-highest-trajectory *test-area*))))
+(assert (= 5844 (cdr (find-highest-trajectory
+                      (read-area (load-file "day_17_input.txt"))))))
