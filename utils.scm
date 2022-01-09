@@ -1,4 +1,48 @@
 ;;
+;; FP
+;;
+(define identity (lambda (x) x))
+(define (invert x) (* -1 x))
+
+(define-syntax compose
+  (syntax-rules ()
+    ((_ . funs)
+     (lambda (arg) (fold-right (lambda (fun result)
+                            (fun result))
+                          arg
+                          (list . funs))))))
+
+(define-syntax chain
+  (syntax-rules ()
+    ((_ arg . funs)
+     ((lambda (a) (fold (lambda (fun result) (fun result))
+                        a
+                        (list . funs))) arg))))
+
+(define (curry func . curry-args)
+  (lambda args
+    (apply func (append curry-args args))))
+(define left-curry curry)
+(define (right-curry func . curry-args)
+  (lambda args
+    (apply func (append args curry-args))))
+
+(define-syntax define-memoized
+  (syntax-rules ()
+    ((_ (name arg1 ...) body1 ...)
+     (define-memoized 10 (name arg1 ...) body1 ...))
+    ((_ size (name arg1 ...) body1 ...)
+     (define name
+       (let ((cache (make-equal-hash-table size)))
+         (lambda (arg1 ...)
+           (let ((cached (hash-table/get cache (list arg1 ...) #f)))
+;;             (when cached (display "cached!"))
+             (or cached
+                 (let ((result body1 ...))
+                   (hash-table/put! cache (list arg1 ...) result)
+                   result)))))))))
+
+;;
 ;; STRINGS
 ;;
 ;; load file and return list of strings (1 per line)
@@ -77,6 +121,17 @@
 (define set-second! (lambda (l x) (set-cdr! l (cons x (list-tail l 2)))))
 (define set-third! (lambda (l x) (set-cdr! (cdr l) (cons x (list-tail l 3)))))
 
+;; insert in a sorted list
+(define (insert ls obj cmp)
+  (cond ((null? ls) (list obj))
+        ((cmp obj (car ls)) (cons obj ls))
+        (else
+         (cons (car ls) (insert (cdr ls) obj cmp)))))
+(assert (equal? '(1) (insert '() 1 <)))
+(assert (equal? '(1 2) (insert '(2) 1 <)))
+(assert (equal? '(1 2) (insert '(1) 2 <)))
+(assert (equal? '(1 2 3 4) (insert '(1 2 4) 3 <)))
+
 ;; remove duplicates in a sorted list
 (define (uniq lst)
   (cond
@@ -144,6 +199,14 @@
                                   (vector-ref v2 i))))
         0 (iota (vector-length v1))))
 (assert (= 10 (vector-mult '#(1 2 3) '#(3 2 1))))
+
+(define (vector-for-each proc v)
+  (let loop ((i 0))
+    (unless (= i (vector-length v))
+      (proc i (vector-ref v i))
+      (loop (1+ i)))))
+(assert (= 14 (let ((sum 0)) (vector-for-each (lambda (i v) (set! sum (+ sum (* i v))))
+                                              '#(0 1 2 3)) sum)))
 
 ;;
 ;; MATRICES
@@ -447,50 +510,6 @@
               (1+ count)))))
 (assert (= 2 (bit-string-count-ones '#*010100)))
 (assert (= 4 (bit-string-count-ones '#*011101)))
-
-;;
-;; FP
-;;
-(define identity (lambda (x) x))
-(define (invert x) (* -1 x))
-
-(define-syntax compose
-  (syntax-rules ()
-    ((_ . funs)
-     (lambda (arg) (fold-right (lambda (fun result)
-                            (fun result))
-                          arg
-                          (list . funs))))))
-
-(define-syntax chain
-  (syntax-rules ()
-    ((_ arg . funs)
-     ((lambda (a) (fold (lambda (fun result) (fun result))
-                        a
-                        (list . funs))) arg))))
-
-(define (curry func . curry-args)
-  (lambda args
-    (apply func (append curry-args args))))
-(define left-curry curry)
-(define (right-curry func . curry-args)
-  (lambda args
-    (apply func (append args curry-args))))
-
-(define-syntax define-memoized
-  (syntax-rules ()
-    ((_ (name arg1 ...) body1 ...)
-     (define-memoized 10 (name arg1 ...) body1 ...))
-    ((_ size (name arg1 ...) body1 ...)
-     (define name
-       (let ((cache (make-equal-hash-table size)))
-         (lambda (arg1 ...)
-           (let ((cached (hash-table/get cache (list arg1 ...) #f)))
-;;             (when cached (display "cached!"))
-             (or cached
-                 (let ((result body1 ...))
-                   (hash-table/put! cache (list arg1 ...) result)
-                   result)))))))))
 
 ;;
 ;; OTHER

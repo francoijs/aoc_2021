@@ -2,12 +2,7 @@
 
 (load "utils.scm")
 
-;; bit-cube = matrix of bit-strings
-(define (make-bit-cube side)
-  (build-matrix side side
-                (lambda (r c) (make-bit-string side #f)))))
-
-(define-structure cuboid x1 x2 y1 y2 z1 z2)
+(define-structure (cuboid (type vector)) x1 x2 y1 y2 z1 z2)
 
 ;; reboot step = (cuboid . state)
 (define (read-reboot-step str)
@@ -28,43 +23,108 @@
   (assert (= 11 (cuboid-z2 (car step))))
   (assert (= 9 (cuboid-x1 (car step)))))
 
-;; perform 1 step and return the cube
-(define (bit-cube/step! step cube)
-  (define (idx pos)
-    (+ pos (quotient (-1+ (matrix-height cube)) 2)))
-  (let ((cuboid (car step)))
-    (matrix-for-each
-     (lambda (row col bs)
-       ((if (cdr step)
-            bit-string-set-range!
-            bit-string-clear-range!)
-        bs
-        (idx (cuboid-z1 cuboid))
-        (1+ (idx (cuboid-z2 cuboid)))))
-     (submatrix cube
-                (idx (cuboid-x1 cuboid))
-                (idx (cuboid-y1 cuboid))
-                (- (idx (cuboid-x2 cuboid)) (idx (cuboid-x1 cuboid)) -1)
-                (- (idx (cuboid-y2 cuboid)) (idx (cuboid-y1 cuboid)) -1))))
-  cube)
+(define-structure bit-cube matrix xs ys zs)
 
-;; count bits 1
-(define (bit-cube/count-ones cube)
-  (matrix-fold (lambda (bs sum) (+ sum (bit-string-count-ones bs)))
-               0
-               cube))
-(assert (= 27 (bit-cube/count-ones
-               (bit-cube/step!
-                (read-reboot-step "on x=10..12,y=10..12,z=10..12")
-                (make-bit-cube 24)))))
+;; Store all possible ranges on 1 axis as a vector of pairs (coord . index)
+;; e.g: '(10 11 12) -> '#((10 . 0) (11 . 2) (12 . 4))
+;;      index is 0 for 10..10, 1 for 10..11, 2 for 11..11, etc
+;; States of ranges are stored in a matrix of bit-strings
+(define (build-bit-cube cuboids)
+  (define (coords->vector cs)
+    (let ((vec (list->vector (uniq (sort cs <)))))
+      (fold (lambda (n res)
+              (vector-set res n (cons (vector-ref vec n) (* 2 n))))
+            (make-vector (vector-length vec))
+            (iota (vector-length vec)))))
+  (let ((xs (coords->vector (append (map cuboid-x1 cuboids)
+                                    (map cuboid-x2 cuboids))))
+        (ys (coords->vector (append (map cuboid-y1 cuboids)
+                                    (map cuboid-y2 cuboids))))
+        (zs (coords->vector (append (map cuboid-z1 cuboids)
+                                    (map cuboid-z2 cuboids)))))
+    (warn "dimensions: " (vector-length xs) (vector-length ys) (vector-length zs))
+    (make-bit-cube 
+     (make-matrix (-1+ (* 2 (vector-length xs)))
+                  (-1+ (* 2 (vector-length ys)))
+                  #f)
+     xs ys zs)))
+
+(define (bit-cube-ref cube x y z)
+  (let ((bs (matrix-ref (bit-cube-matrix cube) x y)))
+    (and bs (bit-string-ref bs z))))
 
 (define *test-steps* (map read-reboot-step
                           '("on x=10..12,y=10..12,z=10..12"
                             "on x=11..13,y=11..13,z=11..13"
                             "off x=9..11,y=9..11,z=9..11"
                             "on x=10..10,y=10..10,z=10..10")))
+(let ((bc (build-bit-cube (map car *test-steps*))))
+  (assert (equal? '(9 . 9) (matrix-dimensions (bit-cube-matrix bc))))
+  (assert (not (bit-cube-ref bc 0 0 0))))
+
+(define (bit-cube-set! cube x y z1 z2)
+  (let ((bs (matrix-ref (bit-cube-matrix cube) x y)))
+    (if bs
+        (bit-string-set-range! bs z1 (1+ z2))
+        ;; allocate new bit-string for the z coordinate
+        (let ((bs (make-bit-string (-1+ (* 2 (vector-length (bit-cube-zs cube)))) #f)))
+          (bit-string-set-range! bs z1 (1+ z2))
+          (matrix-set! (bit-cube-matrix cube) x y bs)))))
+
+(define (bit-cube-clear! cube x y z1 z2)
+  (let ((bs (matrix-ref (bit-cube-matrix cube) x y)))
+    (or (not bs)
+        (begin
+          (bit-string-clear-range! bs z1 (1+ z2))
+          (when (bit-string-zero? bs)
+            ;; all bits are #f on the z coordinate ; bit-string may be deallocated
+            (matrix-set! (bit-cube-matrix cube) x y #f))))))
+
+;; perform 1 step and return the cube
+(define (bit-cube/step! step cube)
+  (define-memoized (index-of accessor c)
+    (cdr (vector-binary-search (accessor cube) < car c)))
+  (let ((x1 (index-of bit-cube-xs (cuboid-x1 (car step))))
+        (x2 (index-of bit-cube-xs (cuboid-x2 (car step))))
+        (y1 (index-of bit-cube-ys (cuboid-y1 (car step))))
+        (y2 (index-of bit-cube-ys (cuboid-y2 (car step))))
+        (z1 (index-of bit-cube-zs (cuboid-z1 (car step))))
+        (z2 (index-of bit-cube-zs (cuboid-z2 (car step)))))
+    (warn x1 x2 y1 y2 z1 z2)
+    (let loop ((x x1) (y y1))
+      (cond ((= x (1+ x2)) cube)
+            ((= y (1+ y2)) (loop (1+ x) y1))
+            (else
+             ((if (cdr step) bit-cube-set! bit-cube-clear!)
+              cube x y z1 z2)
+             (loop x (1+ y)))))))
+(let* ((step (read-reboot-step "on x=10..12,y=10..12,z=10..12"))
+       (bc (build-bit-cube (list (car step)))))
+  (assert (equal? '#*111 (matrix-ref (bit-cube-matrix (bit-cube/step! step bc)) 0 0))))
+
+(define (bit-cube/count-ones cube)
+  ;; length of the range of coords represented by index i
+  ;; e.g: axis = '#((10 . 0) (13 . 2) (14 . 4))
+  ;;      0->1 (10), 1->2 (11..12), 2->1 (13), 3->0, 4->1 (14)
+  (define (range-length axis i)
+    (if (even? i) 1
+        (- (car (vector-ref axis (/ (1+ i) 2)))
+           (car (vector-ref axis (/ (-1+ i) 2)))
+           1)))
+  ;; for each cell #t of the cube, sum the 3d volumes of the corresponding coord ranges
+  (let ((count 0))
+    (matrix-for-each (lambda (x y bs)
+                       (let next-one ((z 0))
+                         (let ((z (and bs (bit-substring-find-next-set-bit bs z (bit-string-length bs)))))
+                           (when z
+                             (set! count (+ count (* (range-length (bit-cube-xs cube) x)
+                                                     (range-length (bit-cube-ys cube) y)
+                                                     (range-length (bit-cube-zs cube) z))))                           
+                             (next-one (1+ z))))))
+                     (bit-cube-matrix cube))
+    count))
 (assert (= 39 (bit-cube/count-ones (fold bit-cube/step!
-                                         (make-bit-cube 101)
+                                         (build-bit-cube (map car *test-steps*))
                                          *test-steps*))))
 
 (define (step-has-max-dimension n)
@@ -100,14 +160,31 @@
                               "on x=-54112..-39298,y=-85059..-49293,z=-27449..7877"
                               "on x=967..23432,y=45373..81175,z=27513..53682")))
 (assert (= 590784 (bit-cube/count-ones (fold bit-cube/step!
-                                             (make-bit-cube 101)
+                                             (build-bit-cube (map car *test-steps-2*))
                                              (filter (step-has-max-dimension 50)
                                                      *test-steps-2*)))))
 
 ;; part 1
-(assert (= 648023 (bit-cube/count-ones
-                   (fold bit-cube/step!
-                         (make-bit-cube 101)
-                         (filter (step-has-max-dimension 50)
-                                 (map read-reboot-step
-                                      (load-file "day_22_input.txt")))))))
+(let ((steps (filter (step-has-max-dimension 50)
+                     (map read-reboot-step
+                          (load-file "day_22_input.txt")))))
+  (warn "steps:" (length steps))
+  (assert (= 648023 (bit-cube/count-ones
+                     (fold bit-cube/step!
+                           (build-bit-cube (map car steps))
+                           steps)))))
+
+;; part 2
+(let* ((steps (map read-reboot-step
+                   (load-file "day_22_input.txt")))
+       (cube (build-bit-cube (map car steps)))
+       (count (length steps)))
+  (warn "steps:" (length steps))
+  (bit-cube/count-ones
+   (fold (lambda (step cube)
+           (set! count (-1+ count))
+           (when (zero? (modulo count 10))
+             (warn "steps:" count)
+             (print-gc-statistics))
+           (bit-cube/step! step cube))
+         cube steps)))
